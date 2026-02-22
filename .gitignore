@@ -1,5 +1,29 @@
+# Node
 node_modules/
-dist/
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+*.pidb
+.vs/
+*.dll
+*.exe
+*.pdb
+*.cache
+*.nupkg
+**/packages/
+project.lock.json
+
+# Rider
+.idea/
+
+# VS Code
+.vscode/
+
+# Environment
 .env
 .env*.local
 *.log
