@@ -27,3 +27,4 @@ project.lock.json
 .env
 .env*.local
 *.log
+**/appsettings.Development.json
