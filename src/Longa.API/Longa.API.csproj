@@ -1,6 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
+    <PackageReference Include="Auth0.AspNetCore.Authentication.Api" Version="1.0.0-beta.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <ProjectReference Include="..\Longa.Application\Longa.Application.csproj" />
     <ProjectReference Include="..\Longa.Infrastructure\Longa.Infrastructure.csproj" />
   </ItemGroup>

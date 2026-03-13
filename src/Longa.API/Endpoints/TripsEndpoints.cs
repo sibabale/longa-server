@@ -18,12 +18,14 @@ public static class TripsEndpoints
     public static IEndpointRouteBuilder MapTripsEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/trips", PostTrip)
+            .RequireAuthorization()
             .WithName("PostTrip")
             .Produces<TripResponse>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/trips", GetTrips)
+            .RequireAuthorization()
             .WithName("GetTrips")
             .Produces<IReadOnlyList<TripResponse>>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest);
@@ -32,7 +34,7 @@ public static class TripsEndpoints
     }
 
     private static async Task<IResult> PostTrip(
-        [FromHeader(Name = UsersEndpoints.IdentifierForVendorHeader)] string? identifierForVendor,
+        HttpContext httpContext,
         [FromHeader(Name = IdempotencyKeyHeader)] string? idempotencyKeyStr,
         [FromBody] CreateTripRequest request,
         IUserRepository userRepo,
@@ -42,12 +44,11 @@ public static class TripsEndpoints
         IOptions<MatchingOptions> options,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(identifierForVendor))
-            return ErrorResults.BadRequest($"Header '{UsersEndpoints.IdentifierForVendorHeader}' is required.");
+        var currentUser = await UsersEndpoints.GetOrCreateCurrentUserAsync(httpContext.User, userRepo, cancellationToken);
+        if (currentUser is null)
+            return Results.Unauthorized();
 
-        var user = await userRepo.GetByIdentifierForVendorAsync(identifierForVendor.Trim(), cancellationToken);
-        if (user is null)
-            return ErrorResults.NotFound("User not found. Create user first via POST /users.");
+        var user = currentUser;
 
         if (!TryParseRole(request.Role, out var role))
             return ErrorResults.BadRequest("Role must be 'driver' or 'rider'.");

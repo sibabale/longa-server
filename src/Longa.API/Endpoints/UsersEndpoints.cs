@@ -1,10 +1,11 @@
-using Longa.Application.Common.Interfaces;
-using Longa.Application.Common.Models;
 using Longa.Domain.Entities;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Builder;
+using Longa.Application.Common.Models;
+using Longa.Application.Common.Interfaces;
 
 namespace Longa.API;
 
@@ -15,11 +16,13 @@ public static class UsersEndpoints
     public static IEndpointRouteBuilder MapUsersEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/users", CreateOrGetUser)
+            .RequireAuthorization()
             .WithName("CreateOrGetUser")
             .Produces<UserResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest);
 
         app.MapPut("/users/me/push-token", PutPushToken)
+            .RequireAuthorization()
             .WithName("PutPushToken")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status400BadRequest)
@@ -29,54 +32,71 @@ public static class UsersEndpoints
     }
 
     private static async Task<IResult> CreateOrGetUser(
-        [FromBody] CreateUserRequest request,
+        HttpContext httpContext,
         IUserRepository userRepo,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.IdentifierForVendor))
-            return ErrorResults.BadRequest("Device identifier is required.");
+        var currentUser = await GetOrCreateCurrentUserAsync(httpContext.User, userRepo, cancellationToken);
+        if (currentUser is null)
+            return Results.Unauthorized();
 
-        var existing = await userRepo.GetByIdentifierForVendorAsync(request.IdentifierForVendor, cancellationToken);
-        if (existing is not null)
-        {
-            return Results.Ok(ToUserResponse(existing));
-        }
-
-        var user = new User
-        {
-            IdentifierForVendor = request.IdentifierForVendor.Trim(),
-            DeviceModel = request.DeviceModel?.Trim(),
-            DeviceMake = request.DeviceMake?.Trim()
-        };
-        await userRepo.CreateAsync(user, cancellationToken);
-        return Results.Ok(ToUserResponse(user));
+        return Results.Ok(ToUserResponse(currentUser));
     }
 
     private static async Task<IResult> PutPushToken(
-        [FromHeader(Name = IdentifierForVendorHeader)] string? identifierForVendor,
+        HttpContext httpContext,
         [FromBody] PutPushTokenRequest request,
         IUserRepository userRepo,
         IPushTokenRepository pushTokenRepo,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(identifierForVendor))
-            return ErrorResults.BadRequest($"Header '{IdentifierForVendorHeader}' is required.");
         if (string.IsNullOrWhiteSpace(request.Token))
             return ErrorResults.BadRequest("Push token is required.");
 
-        var user = await userRepo.GetByIdentifierForVendorAsync(identifierForVendor.Trim(), cancellationToken);
-        if (user is null)
-            return ErrorResults.NotFound("User not found. Create user first via POST /users.");
+        var currentUser = await GetOrCreateCurrentUserAsync(httpContext.User, userRepo, cancellationToken);
+        if (currentUser is null)
+            return Results.Unauthorized();
 
-        await pushTokenRepo.UpsertAsync(user.Id, request.Token.Trim(), cancellationToken);
+        await pushTokenRepo.UpsertAsync(currentUser.Id, request.Token.Trim(), cancellationToken);
         return Results.NoContent();
     }
 
     private static UserResponse ToUserResponse(User u) => new(
         u.Id,
-        u.IdentifierForVendor,
+        u.Email,
+        u.FullName,
+        u.IdentifierForVendor ?? "",
         u.DeviceModel,
         u.DeviceMake,
         u.CreatedAt
     );
+
+    internal static async Task<User?> GetOrCreateCurrentUserAsync(
+        ClaimsPrincipal principal,
+        IUserRepository userRepo,
+        CancellationToken cancellationToken)
+    {
+        var sub = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? principal.FindFirstValue("sub");
+        if (string.IsNullOrWhiteSpace(sub))
+            return null;
+
+        var user = await userRepo.GetByAuth0UserIdAsync(sub, cancellationToken);
+        if (user is not null)
+            return user;
+
+        var email = principal.FindFirstValue("email") ?? principal.FindFirstValue(ClaimTypes.Email) ?? "";
+        var fullName = principal.FindFirstValue("name") ?? principal.FindFirstValue(ClaimTypes.Name) ?? "";
+
+        var newUser = new User
+        {
+            Auth0UserId = sub,
+            Email = email,
+            FullName = fullName,
+            IdentifierForVendor = null,
+            DeviceModel = null,
+            DeviceMake = null
+        };
+        await userRepo.CreateAsync(newUser, cancellationToken);
+        return newUser;
+    }
 }

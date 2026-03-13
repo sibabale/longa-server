@@ -15,6 +15,7 @@ public static class BookingsEndpoints
     public static IEndpointRouteBuilder MapBookingsEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/bookings", PostBookingRiderSelectsDriver)
+            .RequireAuthorization()
             .WithName("PostBookingRiderSelectsDriver")
             .Produces<BookingResponse>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status400BadRequest)
@@ -22,6 +23,7 @@ public static class BookingsEndpoints
             .Produces(StatusCodes.Status409Conflict);
 
         app.MapPost("/bookings/driver-select", PostBookingDriverSelectsRider)
+            .RequireAuthorization()
             .WithName("PostBookingDriverSelectsRider")
             .Produces<BookingResponse>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status400BadRequest)
@@ -32,18 +34,16 @@ public static class BookingsEndpoints
     }
 
     private static async Task<IResult> PostBookingRiderSelectsDriver(
-        [FromHeader(Name = UsersEndpoints.IdentifierForVendorHeader)] string? identifierForVendor,
+        HttpContext httpContext,
         [FromBody] CreateBookingRequest request,
         IUserRepository userRepo,
         LongaDbContext db,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(identifierForVendor))
-            return ErrorResults.BadRequest($"Header '{UsersEndpoints.IdentifierForVendorHeader}' is required.");
-
-        var user = await userRepo.GetByIdentifierForVendorAsync(identifierForVendor.Trim(), cancellationToken);
-        if (user is null)
-            return ErrorResults.NotFound("User not found. Create user first via POST /users.");
+        var currentUser = await UsersEndpoints.GetOrCreateCurrentUserAsync(httpContext.User, userRepo, cancellationToken);
+        if (currentUser is null)
+            return Results.Unauthorized();
+        var user = currentUser;
 
         if (request.DepartureAt <= DateTimeOffset.UtcNow)
             return ErrorResults.BadRequest("Departure time must be in the future.");
@@ -121,18 +121,16 @@ public static class BookingsEndpoints
     }
 
     private static async Task<IResult> PostBookingDriverSelectsRider(
-        [FromHeader(Name = UsersEndpoints.IdentifierForVendorHeader)] string? identifierForVendor,
+        HttpContext httpContext,
         [FromBody] CreateBookingDriverSelectRequest request,
         IUserRepository userRepo,
         LongaDbContext db,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(identifierForVendor))
-            return ErrorResults.BadRequest($"Header '{UsersEndpoints.IdentifierForVendorHeader}' is required.");
-
-        var user = await userRepo.GetByIdentifierForVendorAsync(identifierForVendor.Trim(), cancellationToken);
-        if (user is null)
-            return ErrorResults.NotFound("User not found. Create user first via POST /users.");
+        var currentUser = await UsersEndpoints.GetOrCreateCurrentUserAsync(httpContext.User, userRepo, cancellationToken);
+        if (currentUser is null)
+            return Results.Unauthorized();
+        var user = currentUser;
 
         if (request.DepartureAt <= DateTimeOffset.UtcNow)
             return ErrorResults.BadRequest("Departure time must be in the future.");

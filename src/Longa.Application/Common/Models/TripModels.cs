@@ -36,6 +36,8 @@ public record CreateUserRequest(
 
 public record UserResponse(
     Guid Id,
+    string Email, 
+    string FullName,
     string IdentifierForVendor,
     string? DeviceModel,
     string? DeviceMake,

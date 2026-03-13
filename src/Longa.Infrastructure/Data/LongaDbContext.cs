@@ -22,6 +22,10 @@ public class LongaDbContext : DbContext
             e.ToTable("users");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.Property(x => x.Email).HasMaxLength(256);
+            e.Property(x => x.FullName).HasMaxLength(500);
+            e.HasIndex(x => x.Auth0UserId).IsUnique();
+            e.Property(x => x.Auth0UserId).HasMaxLength(256);
             e.HasIndex(x => x.IdentifierForVendor).IsUnique();
         });
 

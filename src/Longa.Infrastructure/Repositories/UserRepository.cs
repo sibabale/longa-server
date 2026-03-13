@@ -13,6 +13,11 @@ public class UserRepository(LongaDbContext db) : IUserRepository
             .FirstOrDefaultAsync(u => u.IdentifierForVendor == identifierForVendor, cancellationToken);
     }
 
+    public async Task<User?> GetByAuth0UserIdAsync(string Auth0UserId, CancellationToken cancellationToken = default){
+        return await db.Users
+            .FirstOrDefaultAsync(u => u.Auth0UserId == Auth0UserId, cancellationToken);
+    }
+
     public async Task<User> CreateAsync(User user, CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
